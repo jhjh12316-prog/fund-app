@@ -14,17 +14,13 @@ body {
   padding: 14px;
 }
 
-.night body {}
+.night .card { opacity: 0.7; }
 
 .card {
   background: #1c1c1e;
   border-radius: 14px;
   padding: 14px;
   margin-bottom: 14px;
-}
-
-.night .card {
-  opacity: 0.75;
 }
 
 .title {
@@ -74,7 +70,6 @@ button {
 
 <body>
 
-<!-- 添加 & 刷新 -->
 <div class="card">
   <div class="input-box">
     <input id="fundInput" placeholder="输入6位基金代码">
@@ -83,21 +78,21 @@ button {
   </div>
 </div>
 
-<!-- 列表 -->
 <div id="fundList"></div>
 
 <script>
-/* ===== 本地存储 ===== */
+/* ========= 数据 ========= */
 let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || ["161725"];
 const fundData = {};
+const loadTimer = {};
 
-/* ===== 夜盘判断（简单但够用） ===== */
-(function checkNight() {
+/* ========= 夜盘 ========= */
+(() => {
   const h = new Date().getHours();
   if (h < 9 || h > 15) document.body.classList.add("night");
 })();
 
-/* ===== 添加基金 ===== */
+/* ========= 添加 ========= */
 function addFund() {
   const input = document.getElementById("fundInput");
   const code = input.value.trim();
@@ -116,10 +111,10 @@ function addFund() {
   input.value = "";
 
   render();
-  refreshAll();
+  loadFund(code);
 }
 
-/* ===== 删除 ===== */
+/* ========= 删除 ========= */
 function removeFund(code) {
   fundCodes = fundCodes.filter(c => c !== code);
   localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
@@ -127,7 +122,7 @@ function removeFund(code) {
   render();
 }
 
-/* ===== 排序 ===== */
+/* ========= 排序 ========= */
 function moveFund(code, dir) {
   const i = fundCodes.indexOf(code);
   const j = i + dir;
@@ -137,23 +132,39 @@ function moveFund(code, dir) {
   render();
 }
 
-/* ===== 拉数据（JSONP） ===== */
+/* ========= 拉数据 ========= */
 function loadFund(code) {
   const old = document.getElementById("script_" + code);
   if (old) old.remove();
+
+  fundData[code] = { status: "loading" };
+  render();
 
   const s = document.createElement("script");
   s.id = "script_" + code;
   s.src = `https://fundgz.1234567.com.cn/js/${code}.js`;
   document.body.appendChild(s);
+
+  // 超时保护
+  clearTimeout(loadTimer[code]);
+  loadTimer[code] = setTimeout(() => {
+    if (fundData[code]?.status === "loading") {
+      fundData[code] = { status: "unsupported" };
+      render();
+    }
+  }, 5000);
 }
 
+/* ========= JSONP ========= */
 function jsonpgz(data) {
-  fundData[data.fundcode] = data;
+  fundData[data.fundcode] = {
+    status: "ok",
+    ...data
+  };
   render();
 }
 
-/* ===== 渲染 ===== */
+/* ========= 渲染 ========= */
 function render() {
   const box = document.getElementById("fundList");
   box.innerHTML = "";
@@ -161,23 +172,24 @@ function render() {
   fundCodes.forEach(code => {
     const d = fundData[code];
 
-    if (!d) {
-      box.innerHTML += `
-        <div class="card">
-          <div class="title">基金 ${code}</div>
-          <div style="opacity:.6">数据加载中…</div>
-        </div>`;
-      return;
+    let content = `<div style="opacity:.6">数据加载中…</div>`;
+
+    if (d?.status === "ok") {
+      const cls = d.gszzl >= 0 ? "up" : "down";
+      content = `
+        <div>估值：${d.gsz}</div>
+        <div class="${cls}">涨跌：${d.gszzl}%</div>
+        <div class="time">${d.gztime}</div>`;
     }
 
-    const cls = d.gszzl >= 0 ? "up" : "down";
+    if (d?.status === "unsupported") {
+      content = `<div style="color:#ff9f0a">该基金暂不支持实时估值</div>`;
+    }
 
     box.innerHTML += `
       <div class="card">
-        <div class="title">${d.name}</div>
-        <div>估值：${d.gsz}</div>
-        <div class="${cls}">涨跌：${d.gszzl}%</div>
-        <div class="time">${d.gztime}</div>
+        <div class="title">${d?.name || "基金 " + code}</div>
+        ${content}
         <div class="actions">
           <button onclick="moveFund('${code}',-1)">↑</button>
           <button onclick="moveFund('${code}',1)">↓</button>
@@ -187,7 +199,7 @@ function render() {
   });
 }
 
-/* ===== 刷新 ===== */
+/* ========= 刷新 ========= */
 function refreshAll() {
   fundCodes.forEach(loadFund);
 }
