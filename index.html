@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>基金实时估值</title>
+<title>基金自选估值</title>
 
 <style>
 body {
@@ -35,44 +35,122 @@ body {
   opacity: 0.7;
   margin-top: 6px;
 }
+
+.input-box {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  font-size: 15px;
+}
+
+button {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: #3a3a3c;
+  color: #fff;
+  font-size: 14px;
+}
 </style>
 </head>
 
 <body>
 
-<div class="card" id="fund">
-  基金加载中…
+<!-- 添加基金 -->
+<div class="card">
+  <div class="input-box">
+    <input id="fundInput" placeholder="输入基金代码，如 161725">
+    <button onclick="addFund()">添加</button>
+  </div>
 </div>
 
-<script>
-const fundCode = "161725"; // 👉 改成你的基金代码
+<!-- 基金列表 -->
+<div id="fundList"></div>
 
-function loadFund() {
-  // 删除旧 script，避免重复
-  const oldScript = document.getElementById("fundScript");
+<script>
+/* ===== 初始化基金列表（本地存储） ===== */
+let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || [
+  "161725"
+];
+
+const fundData = {};
+
+/* ===== 添加基金 ===== */
+function addFund() {
+  const input = document.getElementById("fundInput");
+  const code = input.value.trim();
+
+  if (!/^\d{6}$/.test(code)) {
+    alert("请输入6位基金代码");
+    return;
+  }
+
+  if (fundCodes.includes(code)) {
+    alert("已经加过了");
+    return;
+  }
+
+  fundCodes.push(code);
+  localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
+  input.value = "";
+
+  loadFund(code);
+}
+
+/* ===== 拉取基金 ===== */
+function loadFund(code) {
+  const oldScript = document.getElementById("script_" + code);
   if (oldScript) oldScript.remove();
 
   const script = document.createElement("script");
-  script.id = "fundScript";
-  script.src = `https://fundgz.1234567.com.cn/js/${fundCode}.js`;
+  script.id = "script_" + code;
+  script.src = `https://fundgz.1234567.com.cn/js/${code}.js`;
   document.body.appendChild(script);
 }
 
-// JSONP 回调，接口会自动调用这个函数
+/* JSONP 回调 */
 function jsonpgz(data) {
-  const rateClass = data.gszzl >= 0 ? "up" : "down";
-
-  document.getElementById("fund").innerHTML = `
-    <div class="title">${data.name}</div>
-    <div>估值：${data.gsz}</div>
-    <div class="${rateClass}">涨跌：${data.gszzl}%</div>
-    <div class="time">${data.gztime}</div>
-  `;
+  fundData[data.fundcode] = data;
+  render();
 }
 
-// 初次加载 + 每30秒刷新
-loadFund();
-setInterval(loadFund, 30000);
+/* ===== 渲染 ===== */
+function render() {
+  const container = document.getElementById("fundList");
+  container.innerHTML = "";
+
+  fundCodes.forEach(code => {
+    const data = fundData[code];
+    if (!data) return;
+
+    const rateClass = data.gszzl >= 0 ? "up" : "down";
+
+    container.innerHTML += `
+      <div class="card">
+        <div class="title">${data.name}</div>
+        <div>估值：${data.gsz}</div>
+        <div class="${rateClass}">涨跌：${data.gszzl}%</div>
+        <div class="time">${data.gztime}</div>
+      </div>
+    `;
+  });
+}
+
+/* ===== 刷新 ===== */
+function refreshAll() {
+  fundCodes.forEach(code => loadFund(code));
+}
+
+/* 初次加载 */
+refreshAll();
+setInterval(refreshAll, 30000);
 </script>
 
 </body>
