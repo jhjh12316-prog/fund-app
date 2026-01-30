@@ -8,63 +8,76 @@
 <style>
 body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC";
-  background: #111;
+  background: linear-gradient(180deg,#0f1115,#1c1c22);
   color: #eee;
   margin: 0;
   padding: 14px;
 }
 
-.night .card { opacity: 0.7; }
-
 .card {
-  background: #1c1c1e;
-  border-radius: 14px;
-  padding: 14px;
+  background: #1e1e28;
+  border-radius: 16px;
+  padding: 16px;
   margin-bottom: 14px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  transition: transform 0.15s;
 }
+
+.card:hover { transform: translateY(-2px); }
+
+.night .card { opacity: 0.8; }
 
 .title {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 6px;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
 }
 
-.up { color: #ff4d4f; }
-.down { color: #4cd964; }
+.up { color: #ff4d4f; font-weight:600; }
+.down { color: #4cd964; font-weight:600; }
 
-.time {
+.time, .badge {
   font-size: 12px;
-  opacity: 0.7;
-  margin-top: 6px;
+  opacity: 0.8;
+  margin-top: 4px;
 }
 
-.input-box {
+.input-box, .top-actions {
   display: flex;
   gap: 8px;
+  margin-bottom: 12px;
 }
 
 input {
   flex: 1;
-  padding: 10px;
-  border-radius: 10px;
+  padding: 12px;
+  border-radius: 12px;
   border: none;
   font-size: 15px;
+  background: #2a2a35;
+  color: #fff;
 }
 
 button {
-  padding: 8px 12px;
-  border-radius: 10px;
+  padding: 10px 16px;
+  border-radius: 12px;
   border: none;
-  background: #3a3a3c;
+  background: #3a3a4a;
   color: #fff;
-  font-size: 13px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
 }
 
+button:hover { background: #505060; }
+
 .actions {
-  margin-top: 8px;
+  margin-top: 10px;
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
+
+.badge { color: #ff9f0a; font-weight: 600; }
 </style>
 </head>
 
@@ -76,45 +89,36 @@ button {
     <button onclick="addFund()">添加</button>
     <button onclick="refreshAll()">刷新</button>
   </div>
+  <div class="top-actions">
+    <button onclick="toggleUnsupported()">显示 / 隐藏 无估值基金</button>
+  </div>
 </div>
 
 <div id="fundList"></div>
 
 <script>
-/* ========= 数据 ========= */
 let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || ["161725"];
 const fundData = {};
 const loadTimer = {};
+let showUnsupported = false;
 
-/* ========= 夜盘 ========= */
-(() => {
-  const h = new Date().getHours();
-  if (h < 9 || h > 15) document.body.classList.add("night");
-})();
+const now = new Date();
+const hour = now.getHours();
+const isTrading = hour >= 9 && hour < 15;
+if (!isTrading) document.body.classList.add("night");
 
-/* ========= 添加 ========= */
 function addFund() {
   const input = document.getElementById("fundInput");
   const code = input.value.trim();
-
-  if (!/^\d{6}$/.test(code)) {
-    alert("请输入6位基金代码");
-    return;
-  }
-  if (fundCodes.includes(code)) {
-    alert("已经加过了");
-    return;
-  }
-
+  if (!/^\d{6}$/.test(code)) { alert("请输入6位基金代码"); return; }
+  if (fundCodes.includes(code)) { alert("已经加过了"); return; }
   fundCodes.push(code);
   localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
   input.value = "";
-
   render();
   loadFund(code);
 }
 
-/* ========= 删除 ========= */
 function removeFund(code) {
   fundCodes = fundCodes.filter(c => c !== code);
   localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
@@ -122,91 +126,78 @@ function removeFund(code) {
   render();
 }
 
-/* ========= 排序 ========= */
 function moveFund(code, dir) {
-  const i = fundCodes.indexOf(code);
-  const j = i + dir;
-  if (j < 0 || j >= fundCodes.length) return;
+  const i = fundCodes.indexOf(code), j = i+dir;
+  if(j<0||j>=fundCodes.length) return;
   [fundCodes[i], fundCodes[j]] = [fundCodes[j], fundCodes[i]];
   localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
   render();
 }
 
-/* ========= 拉数据 ========= */
-function loadFund(code) {
+function toggleUnsupported() { showUnsupported = !showUnsupported; render(); }
+
+function loadFund(code){
   const old = document.getElementById("script_" + code);
-  if (old) old.remove();
-
-  fundData[code] = { status: "loading" };
+  if(old) old.remove();
+  fundData[code] = {status:"loading"};
   render();
-
-  const s = document.createElement("script");
-  s.id = "script_" + code;
-  s.src = `https://fundgz.1234567.com.cn/js/${code}.js`;
+  const s=document.createElement("script");
+  s.id="script_"+code;
+  s.src=`https://fundgz.1234567.com.cn/js/${code}.js`;
   document.body.appendChild(s);
-
-  // 超时保护
   clearTimeout(loadTimer[code]);
-  loadTimer[code] = setTimeout(() => {
-    if (fundData[code]?.status === "loading") {
-      fundData[code] = { status: "unsupported" };
+  loadTimer[code]=setTimeout(()=>{
+    if(fundData[code]?.status==="loading"){
+      fundData[code]={status:"unsupported"};
       render();
     }
-  }, 5000);
+  },5000);
 }
 
-/* ========= JSONP ========= */
-function jsonpgz(data) {
-  fundData[data.fundcode] = {
-    status: "ok",
-    ...data
-  };
+function jsonpgz(data){
+  fundData[data.fundcode]={status:"ok", ...data};
   render();
 }
 
-/* ========= 渲染 ========= */
-function render() {
+function render(){
   const box = document.getElementById("fundList");
-  box.innerHTML = "";
+  box.innerHTML="";
+  fundCodes.forEach(code=>{
+    const d=fundData[code];
+    if(d?.status==="unsupported"&&!showUnsupported) return;
 
-  fundCodes.forEach(code => {
-    const d = fundData[code];
-
-    let content = `<div style="opacity:.6">数据加载中…</div>`;
-
-    if (d?.status === "ok") {
-      const cls = d.gszzl >= 0 ? "up" : "down";
-      content = `
-        <div>估值：${d.gsz}</div>
-        <div class="${cls}">涨跌：${d.gszzl}%</div>
-        <div class="time">${d.gztime}</div>`;
+    let content=`<div style="opacity:.6">数据加载中…</div>`;
+    if(d?.status==="ok"){
+      const cls=d.gszzl>=0?"up":"down";
+      if(isTrading){
+        content=`<div>估值：${d.gsz}</div>
+                 <div class="${cls}">↑${d.gszzl}%</div>
+                 <div class="time">${d.gztime}</div>`;
+      }else{
+        content=`<div class="badge">盘后参考</div>
+                 <div>单位净值：${d.dwjz}</div>
+                 <div class="${cls}">昨日涨跌：${d.gszzl}%</div>`;
+      }
     }
+    if(d?.status==="unsupported") content=`<div class="badge">该基金无实时估值</div>`;
 
-    if (d?.status === "unsupported") {
-      content = `<div style="color:#ff9f0a">该基金暂不支持实时估值</div>`;
-    }
-
-    box.innerHTML += `
-      <div class="card">
-        <div class="title">${d?.name || "基金 " + code}</div>
-        ${content}
-        <div class="actions">
-          <button onclick="moveFund('${code}',-1)">↑</button>
-          <button onclick="moveFund('${code}',1)">↓</button>
-          <button onclick="removeFund('${code}')">删除</button>
-        </div>
-      </div>`;
+    box.innerHTML+=`<div class="card">
+      <div class="title">${d?.name||"基金 "+code}</div>
+      ${content}
+      <div class="actions">
+        <button onclick="moveFund('${code}',-1)">↑</button>
+        <button onclick="moveFund('${code}',1)">↓</button>
+        <button onclick="removeFund('${code}')">删除</button>
+      </div>
+    </div>`;
   });
 }
 
-/* ========= 刷新 ========= */
-function refreshAll() {
-  fundCodes.forEach(loadFund);
-}
+function refreshAll(){ fundCodes.forEach(loadFund); }
 
 render();
 refreshAll();
-setInterval(refreshAll, 30000);
+setInterval(refreshAll,30000);
 </script>
 
 </body>
