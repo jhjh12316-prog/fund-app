@@ -1,65 +1,78 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>实时估值</title>
+<title>基金实时估值</title>
+
 <style>
 body {
-  font-family: -apple-system, BlinkMacSystemFont;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC";
   background: #111;
   color: #eee;
   margin: 0;
-  padding: 12px;
+  padding: 14px;
 }
+
 .card {
   background: #1c1c1e;
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 12px;
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 14px;
 }
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
 .up { color: #ff4d4f; }
 .down { color: #4cd964; }
+
+.time {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 6px;
+}
 </style>
 </head>
 
 <body>
 
-<div class="card" id="fund">基金加载中…</div>
-<div class="card" id="market">市场加载中…</div>
+<div class="card" id="fund">
+  基金加载中…
+</div>
 
 <script>
-const fundCode = "161725"; // 这里改成你的基金代码
+const fundCode = "161725"; // 👉 改成你的基金代码
 
 function loadFund() {
-  fetch(`https://fundgz.1234567.com.cn/js/${fundCode}.js`)
-    .then(res => res.text())
-    .then(text => {
-      const json = JSON.parse(text.match(/{.*}/)[0]);
-      const rateClass = json.gszzl >= 0 ? "up" : "down";
-      document.getElementById("fund").innerHTML = `
-        <b>${json.name}</b><br>
-        估值：${json.gsz}<br>
-        <span class="${rateClass}">涨跌：${json.gszzl}%</span><br>
-        ${json.gztime}
-      `;
-    });
+  // 删除旧 script，避免重复
+  const oldScript = document.getElementById("fundScript");
+  if (oldScript) oldScript.remove();
+
+  const script = document.createElement("script");
+  script.id = "fundScript";
+  script.src = `https://fundgz.1234567.com.cn/js/${fundCode}.js`;
+  document.body.appendChild(script);
 }
 
-function loadMarket() {
-  fetch("https://hq.sinajs.cn/list=hf_NQ,hf_GC,hf_SI")
-    .then(res => res.text())
-    .then(text => {
-      document.getElementById("market").innerText = text;
-    });
+// JSONP 回调，接口会自动调用这个函数
+function jsonpgz(data) {
+  const rateClass = data.gszzl >= 0 ? "up" : "down";
+
+  document.getElementById("fund").innerHTML = `
+    <div class="title">${data.name}</div>
+    <div>估值：${data.gsz}</div>
+    <div class="${rateClass}">涨跌：${data.gszzl}%</div>
+    <div class="time">${data.gztime}</div>
+  `;
 }
 
+// 初次加载 + 每30秒刷新
 loadFund();
-loadMarket();
-setInterval(() => {
-  loadFund();
-  loadMarket();
-}, 30000);
+setInterval(loadFund, 30000);
 </script>
 
 </body>
