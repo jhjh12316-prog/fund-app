@@ -14,11 +14,17 @@ body {
   padding: 14px;
 }
 
+.night body {}
+
 .card {
   background: #1c1c1e;
   border-radius: 14px;
   padding: 14px;
   margin-bottom: 14px;
+}
+
+.night .card {
+  opacity: 0.75;
 }
 
 .title {
@@ -39,7 +45,6 @@ body {
 .input-box {
   display: flex;
   gap: 8px;
-  margin-bottom: 14px;
 }
 
 input {
@@ -51,36 +56,46 @@ input {
 }
 
 button {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-radius: 10px;
   border: none;
   background: #3a3a3c;
   color: #fff;
-  font-size: 14px;
+  font-size: 13px;
+}
+
+.actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
 }
 </style>
 </head>
 
 <body>
 
-<!-- 添加基金 -->
+<!-- 添加 & 刷新 -->
 <div class="card">
   <div class="input-box">
-    <input id="fundInput" placeholder="输入基金代码，如 161725">
+    <input id="fundInput" placeholder="输入6位基金代码">
     <button onclick="addFund()">添加</button>
+    <button onclick="refreshAll()">刷新</button>
   </div>
 </div>
 
-<!-- 基金列表 -->
+<!-- 列表 -->
 <div id="fundList"></div>
 
 <script>
-/* ===== 初始化基金列表（本地存储） ===== */
-let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || [
-  "161725"
-];
-
+/* ===== 本地存储 ===== */
+let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || ["161725"];
 const fundData = {};
+
+/* ===== 夜盘判断（简单但够用） ===== */
+(function checkNight() {
+  const h = new Date().getHours();
+  if (h < 9 || h > 15) document.body.classList.add("night");
+})();
 
 /* ===== 添加基金 ===== */
 function addFund() {
@@ -91,7 +106,6 @@ function addFund() {
     alert("请输入6位基金代码");
     return;
   }
-
   if (fundCodes.includes(code)) {
     alert("已经加过了");
     return;
@@ -101,21 +115,39 @@ function addFund() {
   localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
   input.value = "";
 
-  loadFund(code);
+  render();
+  refreshAll();
 }
 
-/* ===== 拉取基金 ===== */
+/* ===== 删除 ===== */
+function removeFund(code) {
+  fundCodes = fundCodes.filter(c => c !== code);
+  localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
+  delete fundData[code];
+  render();
+}
+
+/* ===== 排序 ===== */
+function moveFund(code, dir) {
+  const i = fundCodes.indexOf(code);
+  const j = i + dir;
+  if (j < 0 || j >= fundCodes.length) return;
+  [fundCodes[i], fundCodes[j]] = [fundCodes[j], fundCodes[i]];
+  localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
+  render();
+}
+
+/* ===== 拉数据（JSONP） ===== */
 function loadFund(code) {
-  const oldScript = document.getElementById("script_" + code);
-  if (oldScript) oldScript.remove();
+  const old = document.getElementById("script_" + code);
+  if (old) old.remove();
 
-  const script = document.createElement("script");
-  script.id = "script_" + code;
-  script.src = `https://fundgz.1234567.com.cn/js/${code}.js`;
-  document.body.appendChild(script);
+  const s = document.createElement("script");
+  s.id = "script_" + code;
+  s.src = `https://fundgz.1234567.com.cn/js/${code}.js`;
+  document.body.appendChild(s);
 }
 
-/* JSONP 回调 */
 function jsonpgz(data) {
   fundData[data.fundcode] = data;
   render();
@@ -123,32 +155,44 @@ function jsonpgz(data) {
 
 /* ===== 渲染 ===== */
 function render() {
-  const container = document.getElementById("fundList");
-  container.innerHTML = "";
+  const box = document.getElementById("fundList");
+  box.innerHTML = "";
 
   fundCodes.forEach(code => {
-    const data = fundData[code];
-    if (!data) return;
+    const d = fundData[code];
 
-    const rateClass = data.gszzl >= 0 ? "up" : "down";
+    if (!d) {
+      box.innerHTML += `
+        <div class="card">
+          <div class="title">基金 ${code}</div>
+          <div style="opacity:.6">数据加载中…</div>
+        </div>`;
+      return;
+    }
 
-    container.innerHTML += `
+    const cls = d.gszzl >= 0 ? "up" : "down";
+
+    box.innerHTML += `
       <div class="card">
-        <div class="title">${data.name}</div>
-        <div>估值：${data.gsz}</div>
-        <div class="${rateClass}">涨跌：${data.gszzl}%</div>
-        <div class="time">${data.gztime}</div>
-      </div>
-    `;
+        <div class="title">${d.name}</div>
+        <div>估值：${d.gsz}</div>
+        <div class="${cls}">涨跌：${d.gszzl}%</div>
+        <div class="time">${d.gztime}</div>
+        <div class="actions">
+          <button onclick="moveFund('${code}',-1)">↑</button>
+          <button onclick="moveFund('${code}',1)">↓</button>
+          <button onclick="removeFund('${code}')">删除</button>
+        </div>
+      </div>`;
   });
 }
 
 /* ===== 刷新 ===== */
 function refreshAll() {
-  fundCodes.forEach(code => loadFund(code));
+  fundCodes.forEach(loadFund);
 }
 
-/* 初次加载 */
+render();
 refreshAll();
 setInterval(refreshAll, 30000);
 </script>
