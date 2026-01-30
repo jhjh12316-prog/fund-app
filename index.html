@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实时估值</title>
+<style>
+body {
+  font-family: -apple-system, BlinkMacSystemFont;
+  background: #111;
+  color: #eee;
+  margin: 0;
+  padding: 12px;
+}
+.card {
+  background: #1c1c1e;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.up { color: #ff4d4f; }
+.down { color: #4cd964; }
+</style>
+</head>
+
+<body>
+
+<div class="card" id="fund">基金加载中…</div>
+<div class="card" id="market">市场加载中…</div>
+
+<script>
+const fundCode = "161725"; // 这里改成你的基金代码
+
+function loadFund() {
+  fetch(`https://fundgz.1234567.com.cn/js/${fundCode}.js`)
+    .then(res => res.text())
+    .then(text => {
+      const json = JSON.parse(text.match(/{.*}/)[0]);
+      const rateClass = json.gszzl >= 0 ? "up" : "down";
+      document.getElementById("fund").innerHTML = `
+        <b>${json.name}</b><br>
+        估值：${json.gsz}<br>
+        <span class="${rateClass}">涨跌：${json.gszzl}%</span><br>
+        ${json.gztime}
+      `;
+    });
+}
+
+function loadMarket() {
+  fetch("https://hq.sinajs.cn/list=hf_NQ,hf_GC,hf_SI")
+    .then(res => res.text())
+    .then(text => {
+      document.getElementById("market").innerText = text;
+    });
+}
+
+loadFund();
+loadMarket();
+setInterval(() => {
+  loadFund();
+  loadMarket();
+}, 30000);
+</script>
+
+</body>
+</html>
