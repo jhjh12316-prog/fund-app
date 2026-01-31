@@ -2,215 +2,153 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>基金自选估值（多源 + 按钮操作）</title>
+<title>基金实时估值</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC";
-  background: linear-gradient(180deg,#0f1115,#1c1c22);
-  color: #eee;
-  margin: 0;
-  padding: 14px;
+body{margin:0;background:#0f0f14;color:#eee;font-family:system-ui}
+.wrap{max-width:420px;margin:auto;padding:16px}
+.card{
+  background:linear-gradient(135deg,#6b7cff,#8e5cff);
+  border-radius:14px;padding:16px;margin-bottom:14px
 }
-.card {
-  background: #1e1e28;
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 14px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-  position: relative;
+.card h1{margin:0;font-size:22px}
+.row{display:flex;justify-content:space-between;margin-top:10px}
+.box{background:#1b1b22;border-radius:12px;padding:14px}
+.item{display:flex;justify-content:space-between;align-items:center;
+  padding:10px 0;border-bottom:1px solid #333}
+.item:last-child{border:none}
+.red{color:#ff6b6b}
+.green{color:#4cffb0}
+input,button{
+  background:#2a2a33;color:#eee;border:none;border-radius:6px;padding:6px
 }
-.night .card { opacity: 0.8; }
-.title {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-.up { color: #ff4d4f; font-weight:600; }
-.down { color: #4cd964; font-weight:600; }
-.time, .badge { font-size: 12px; opacity: 0.8; margin-top: 4px; }
-.input-box, .top-actions { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-input { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 15px; background: #2a2a35; color: #fff; }
-button { padding: 10px 16px; border-radius: 12px; border: none; background: #3a3a4a; color: #fff; font-size: 14px; cursor: pointer; transition: background 0.15s; }
-button:hover { background: #505060; }
-.actions { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
-.badge { color: #ff9f0a; font-weight: 600; }
-.sourceBtn { position:absolute; top:10px; right:16px; padding:4px 8px; border-radius:8px; font-size:12px; background:#3a3a60; cursor:pointer; color:#fff; }
+input{width:70px}
+button{margin-left:6px}
+small{color:#aaa}
 </style>
 </head>
+
 <body>
+<div class="wrap">
 
 <div class="card">
-  <div class="input-box">
-    <input id="fundInput" placeholder="输入6位基金代码">
-    <button onclick="addFund()">添加</button>
-    <button onclick="refreshAll()">刷新</button>
-  </div>
-  <div class="top-actions">
-    <button onclick="toggleUnsupported()">显示 / 隐藏 无估值基金</button>
-    <label style="color:#fff">全局默认数据源：
-      <select id="globalSource" onchange="setGlobalSource(this.value)">
-        <option value="auto">自动</option>
-        <option value="eastmoney">东财</option>
-        <option value="sina">新浪</option>
-      </select>
-    </label>
+  <h1>总资产</h1>
+  <div class="row">
+    <div>
+      <small>资产合计</small>
+      <div id="total">--</div>
+    </div>
+    <div>
+      <small>当日盈亏</small>
+      <div id="today">--</div>
+    </div>
   </div>
 </div>
 
-<div id="fundList"></div>
+<div class="box">
+  <h3>我的持仓</h3>
+  <div id="list"></div>
+
+  <div style="margin-top:10px">
+    <input id="code" placeholder="代码">
+    <input id="money" placeholder="金额">
+    <button onclick="add()">添加</button>
+    <button onclick="exportCSV()">导出</button>
+  </div>
+</div>
+
+<div class="box" style="margin-top:14px">
+  <h3>夜盘参考</h3>
+  <div id="night">加载中…</div>
+</div>
+
+</div>
 
 <script>
-let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || ["161725"];
-let fundSources = JSON.parse(localStorage.getItem("fundSources")) || {};
-const fundData = {};
-const loadTimer = {};
-let showUnsupported = false;
-let globalSource = localStorage.getItem("globalSource") || "auto";
+let funds = JSON.parse(localStorage.getItem("funds")||"[]")
 
-document.getElementById("globalSource").value = globalSource;
+function save(){localStorage.setItem("funds",JSON.stringify(funds))}
 
-function setGlobalSource(val){ globalSource=val; localStorage.setItem("globalSource",val); refreshAll(); }
-
-const now = new Date();
-const hour = now.getHours();
-const isTrading = hour>=9 && hour<15;
-if(!isTrading) document.body.classList.add("night");
-
-/* 添加基金 */
-function addFund(){
-  const input=document.getElementById("fundInput");
-  const code=input.value.trim();
-  if(!/^\d{6}$/.test(code)){ alert("请输入6位基金代码"); return; }
-  if(fundCodes.includes(code)){ alert("已经加过了"); return; }
-  fundCodes.push(code);
-  fundSources[code]=globalSource;
-  localStorage.setItem("fundCodes",JSON.stringify(fundCodes));
-  localStorage.setItem("fundSources",JSON.stringify(fundSources));
-  input.value="";
-  render();
-  loadFund(code);
+async function china(code){
+  let r = await fetch(`https://fundgz.1234567.com.cn/js/${code}.js`)
+  let t = await r.text()
+  let j = eval(t.replace("jsonpgz(","").replace(");",""))
+  return {name:j.name,price:+j.gsz,change:+j.gszzl}
 }
 
-/* 删除基金 */
-function removeFund(code){
-  fundCodes=fundCodes.filter(c=>c!==code);
-  delete fundSources[code];
-  localStorage.setItem("fundCodes",JSON.stringify(fundCodes));
-  localStorage.setItem("fundSources",JSON.stringify(fundSources));
-  delete fundData[code];
-  render();
-}
-
-/* 切换基金数据源 */
-function changeFundSource(code){
-  const sources=["auto","eastmoney","sina"];
-  const cur=fundSources[code]||globalSource;
-  const idx=(sources.indexOf(cur)+1)%sources.length;
-  fundSources[code]=sources[idx];
-  localStorage.setItem("fundSources",JSON.stringify(fundSources));
-  loadFund(code);
-}
-
-/* 显示隐藏无估值 */
-function toggleUnsupported(){ showUnsupported=!showUnsupported; render(); }
-
-/* 加载基金数据 */
-function loadFund(code){
-  const old=document.getElementById("script_"+code);
-  if(old) old.remove();
-  fundData[code]={status:"loading"};
-  render();
-
-  const source=fundSources[code]||globalSource;
-
-  function trySina(){ 
-    fetch(`https://hq.sinajs.cn/list=f_${code}`).then(r=>r.text()).then(txt=>{
-      const match=txt.match(/"([^"]+)"/);
-      if(match){
-        const arr=match[1].split(",");
-        if(arr.length>3){
-          fundData[code]={status:"ok", name:arr[0], dwjz:arr[3], gszzl:parseFloat(arr[2]), gztime:arr[1], source:"sina"};
-        }else fundData[code]={status:"unsupported"};
-      }else fundData[code]={status:"unsupported"};
-      render();
-    }).catch(()=>{fundData[code]={status:"unsupported"}; render();});
+async function global(s){
+  let r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${s}`)
+  let j = await r.json()
+  let m=j.chart.result[0].meta
+  return {
+    name:s,
+    price:m.regularMarketPrice,
+    change:(m.regularMarketPrice-m.previousClose)/m.previousClose*100
   }
-
-  if(source==="eastmoney" || (source==="auto")){
-    const s=document.createElement("script");
-    s.id="script_"+code;
-    s.src=`https://fundgz.1234567.com.cn/js/${code}.js`;
-    document.body.appendChild(s);
-
-    clearTimeout(loadTimer[code]);
-    loadTimer[code]=setTimeout(()=>{
-      if(fundData[code]?.status==="loading"){
-        if(source==="eastmoney" || source==="auto"){ trySina(); }
-        else{ fundData[code]={status:"unsupported"}; render(); }
-      }
-    },5000);
-  } else if(source==="sina"){ trySina(); }
 }
 
-/* JSONP回调 */
-function jsonpgz(data){ fundData[data.fundcode]={status:"ok", ...data, source:"eastmoney"}; render(); }
-
-/* 渲染列表 */
-function render(){
-  const box=document.getElementById("fundList");
-  box.innerHTML="";
-  fundCodes.forEach((code,i)=>{
-    const d=fundData[code];
-    if(d?.status==="unsupported"&&!showUnsupported) return;
-
-    let content=`<div style="opacity:.6">数据加载中…</div>`;
-    if(d?.status==="ok"){
-      const cls=d.gszzl>=0?"up":"down";
-      if(isTrading){
-        content=`<div>估值：${d.gsz||d.dwjz}</div>
-                 <div class="${cls}">↑${d.gszzl}%</div>
-                 <div class="time">${d.gztime||""}</div>`;
-      }else{
-        content=`<div class="badge">盘后参考</div>
-                 <div>单位净值：${d.dwjz}</div>
-                 <div class="${cls}">昨日涨跌：${d.gszzl}%</div>`;
-      }
-    }
-    if(d?.status==="unsupported") content=`<div class="badge">该基金无实时估值</div>`;
-
-    const card=document.createElement("div");
-    card.className="card";
-    card.innerHTML=`
-      <div class="title">${d?.name||"基金 "+code}</div>
-      ${content}
-      <span class="sourceBtn" onclick="changeFundSource('${code}')">${(fundSources[code]||globalSource).toUpperCase()}</span>
-      <div class="actions">
-        <button onclick="moveFundUp('${code}')">↑ 上移</button>
-        <button onclick="moveFundDown('${code}')">↓ 下移</button>
-        <button onclick="removeFund('${code}')">删除</button>
-      </div>`;
-    box.appendChild(card);
-  });
+async function render(){
+  let total=0,today=0
+  let box=document.getElementById("list")
+  box.innerHTML=""
+  for(let f of funds){
+    let d = f.type==="china"?await china(f.code):await global(f.code)
+    let day = f.money*d.change/100
+    total+=f.money
+    today+=day
+    let div=document.createElement("div")
+    div.className="item"
+    div.innerHTML=`
+      <div>
+        ${d.name}<br><small>${f.money}</small>
+      </div>
+      <div class="${day>=0?'red':'green'}">
+        ${(day>=0?'+':'')+day.toFixed(2)}
+      </div>`
+    box.appendChild(div)
+  }
+  total+=today
+  document.getElementById("total").innerText=total.toFixed(2)
+  document.getElementById("today").innerText=
+    (today>=0?'+':'')+today.toFixed(2)
 }
 
-/* 上下移动 */
-function moveFundUp(code){
-  const i=fundCodes.indexOf(code);
-  if(i>0){ [fundCodes[i-1],fundCodes[i]]=[fundCodes[i],fundCodes[i-1]]; localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); render(); }
-}
-function moveFundDown(code){
-  const i=fundCodes.indexOf(code);
-  if(i<fundCodes.length-1){ [fundCodes[i+1],fundCodes[i]]=[fundCodes[i],fundCodes[i+1]]; localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); render(); }
+function add(){
+  let c=code.value.trim()
+  let m=+money.value
+  if(!c||!m)return
+  funds.push({code:c,money:m,type:/^\d+$/.test(c)?"china":"global"})
+  save();render()
 }
 
-/* 刷新 */
-function refreshAll(){ fundCodes.forEach(loadFund); }
+async function night(){
+  let dxy=await global("DX-Y.NYB")
+  let nq=await global("NQ=F")
+  let gc=await global("GC=F")
+  let txt=`美元指数 ${dxy.change.toFixed(2)}%<br>
+  纳指期货 ${nq.change.toFixed(2)}%<br>
+  黄金期货 ${gc.change.toFixed(2)}%<br><br>
+  ${
+    dxy.change<0&&gc.change>0
+    ?"资源偏多，风险偏好上升"
+    :"偏防御，注意回撤"
+  }`
+  nightBox.innerHTML=txt
+}
 
-render();
-refreshAll();
-setInterval(refreshAll,30000);
+function exportCSV(){
+  let rows=["名称,代码,金额"]
+  funds.forEach(f=>rows.push(`${f.code},${f.code},${f.money}`))
+  let blob=new Blob([rows.join("\n")],{type:"text/csv"})
+  let a=document.createElement("a")
+  a.href=URL.createObjectURL(blob)
+  a.download="funds.csv"
+  a.click()
+}
+
+render()
+night()
+setInterval(render,30000)
 </script>
-
 </body>
 </html>
