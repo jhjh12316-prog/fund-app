@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>基金自选估值（多源）</title>
+<title>基金自选估值（多源 + 可选数据源）</title>
 <style>
 body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC";
@@ -12,7 +12,6 @@ body {
   margin: 0;
   padding: 14px;
 }
-
 .card {
   background: #1e1e28;
   border-radius: 16px;
@@ -23,77 +22,25 @@ body {
   touch-action: pan-y;
   position: relative;
 }
-
 .card.dragging { opacity:0.7; transform:scale(1.03); }
-
 .night .card { opacity: 0.8; }
-
 .title {
   font-size: 18px;
   font-weight: 700;
   margin-bottom: 8px;
 }
-
 .up { color: #ff4d4f; font-weight:600; }
 .down { color: #4cd964; font-weight:600; }
-
-.time, .badge {
-  font-size: 12px;
-  opacity: 0.8;
-  margin-top: 4px;
-}
-
-.input-box, .top-actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-input {
-  flex: 1;
-  padding: 12px;
-  border-radius: 12px;
-  border: none;
-  font-size: 15px;
-  background: #2a2a35;
-  color: #fff;
-}
-
-button {
-  padding: 10px 16px;
-  border-radius: 12px;
-  border: none;
-  background: #3a3a4a;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
+.time, .badge { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+.input-box, .top-actions { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+input { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 15px; background: #2a2a35; color: #fff; }
+button { padding: 10px 16px; border-radius: 12px; border: none; background: #3a3a4a; color: #fff; font-size: 14px; cursor: pointer; transition: background 0.15s; }
 button:hover { background: #505060; }
-
-.actions {
-  margin-top: 10px;
-  display: flex;
-  gap: 6px;
-}
-
+.actions { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
 .badge { color: #ff9f0a; font-weight: 600; }
-
-.deleteBtn {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  background:#ff4d4f;
-  color:#fff;
-  padding:6px 10px;
-  border-radius:10px;
-  display:none;
-}
-
+.deleteBtn { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); background:#ff4d4f; color:#fff; padding:6px 10px; border-radius:10px; display:none; }
 .card.showDelete .deleteBtn { display:block; }
-
+.sourceBtn { position:absolute; top:10px; right:50px; padding:4px 8px; border-radius:8px; font-size:12px; background:#3a3a60; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -106,6 +53,13 @@ button:hover { background: #505060; }
   </div>
   <div class="top-actions">
     <button onclick="toggleUnsupported()">显示 / 隐藏 无估值基金</button>
+    <label style="color:#fff">全局默认数据源：
+      <select id="globalSource" onchange="setGlobalSource(this.value)">
+        <option value="auto">自动</option>
+        <option value="eastmoney">东财</option>
+        <option value="sina">新浪</option>
+      </select>
+    </label>
   </div>
 </div>
 
@@ -113,85 +67,99 @@ button:hover { background: #505060; }
 
 <script>
 let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || ["161725"];
+let fundSources = JSON.parse(localStorage.getItem("fundSources")) || {};
 const fundData = {};
 const loadTimer = {};
 let showUnsupported = false;
+let globalSource = localStorage.getItem("globalSource") || "auto";
+
+document.getElementById("globalSource").value = globalSource;
+
+function setGlobalSource(val){ globalSource=val; localStorage.setItem("globalSource",val); refreshAll(); }
 
 const now = new Date();
 const hour = now.getHours();
-const isTrading = hour >= 9 && hour < 15;
-if (!isTrading) document.body.classList.add("night");
+const isTrading = hour>=9 && hour<15;
+if(!isTrading) document.body.classList.add("night");
 
 /* ===== 添加基金 ===== */
-function addFund() {
-  const input = document.getElementById("fundInput");
-  const code = input.value.trim();
-  if (!/^\d{6}$/.test(code)) { alert("请输入6位基金代码"); return; }
-  if (fundCodes.includes(code)) { alert("已经加过了"); return; }
+function addFund(){
+  const input=document.getElementById("fundInput");
+  const code=input.value.trim();
+  if(!/^\d{6}$/.test(code)){ alert("请输入6位基金代码"); return; }
+  if(fundCodes.includes(code)){ alert("已经加过了"); return; }
   fundCodes.push(code);
-  localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
-  input.value = "";
+  fundSources[code]=globalSource;
+  localStorage.setItem("fundCodes",JSON.stringify(fundCodes));
+  localStorage.setItem("fundSources",JSON.stringify(fundSources));
+  input.value="";
   render();
   loadFund(code);
 }
 
 /* ===== 删除 ===== */
-function removeFund(code) {
-  fundCodes = fundCodes.filter(c => c !== code);
-  localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
+function removeFund(code){
+  fundCodes=fundCodes.filter(c=>c!==code);
+  delete fundSources[code];
+  localStorage.setItem("fundCodes",JSON.stringify(fundCodes));
+  localStorage.setItem("fundSources",JSON.stringify(fundSources));
   delete fundData[code];
   render();
 }
 
-/* ===== 排序 ===== */
-function moveFund(code, dir) {
-  const i = fundCodes.indexOf(code), j=i+dir;
-  if(j<0||j>=fundCodes.length) return;
-  [fundCodes[i], fundCodes[j]]=[fundCodes[j], fundCodes[i]];
-  localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
-  render();
+/* ===== 切换基金数据源 ===== */
+function changeFundSource(code){
+  const sources=["auto","eastmoney","sina"];
+  const cur=fundSources[code]||globalSource;
+  const idx=(sources.indexOf(cur)+1)%sources.length;
+  fundSources[code]=sources[idx];
+  localStorage.setItem("fundSources",JSON.stringify(fundSources));
+  loadFund(code);
 }
 
 /* ===== 显示隐藏无估值 ===== */
 function toggleUnsupported(){ showUnsupported=!showUnsupported; render(); }
 
-/* ===== 加载基金 ===== */
+/* ===== 加载基金数据 ===== */
 function loadFund(code){
-  const old = document.getElementById("script_"+code);
+  const old=document.getElementById("script_"+code);
   if(old) old.remove();
   fundData[code]={status:"loading"};
   render();
 
-  // 1. 优先东财
-  const s=document.createElement("script");
-  s.id="script_"+code;
-  s.src=`https://fundgz.1234567.com.cn/js/${code}.js`;
-  document.body.appendChild(s);
+  const source=fundSources[code]||globalSource;
 
-  clearTimeout(loadTimer[code]);
-  loadTimer[code]=setTimeout(()=>{
-    if(fundData[code]?.status==="loading"){
-      // 2. 备用新浪接口
-      fetch(`https://hq.sinajs.cn/list=f_${code}`).then(r=>r.text())
-      .then(txt=>{
-        const match=txt.match(/"([^"]+)"/);
-        if(match){
-          const arr=match[1].split(",");
-          if(arr.length>3){
-            fundData[code]={status:"ok", name:arr[0], dwjz:arr[3], gszzl:parseFloat(arr[2]), gztime:arr[1]};
-          } else fundData[code]={status:"unsupported"};
-        } else fundData[code]={status:"unsupported"};
-        render();
-      }).catch(()=>{fundData[code]={status:"unsupported"}; render();});
-    }
-  },5000);
+  function trySina(){ 
+    fetch(`https://hq.sinajs.cn/list=f_${code}`).then(r=>r.text()).then(txt=>{
+      const match=txt.match(/"([^"]+)"/);
+      if(match){
+        const arr=match[1].split(",");
+        if(arr.length>3){
+          fundData[code]={status:"ok", name:arr[0], dwjz:arr[3], gszzl:parseFloat(arr[2]), gztime:arr[1], source:"sina"};
+        }else fundData[code]={status:"unsupported"};
+      }else fundData[code]={status:"unsupported"};
+      render();
+    }).catch(()=>{fundData[code]={status:"unsupported"}; render();});
+  }
+
+  if(source==="eastmoney" || (source==="auto")){
+    const s=document.createElement("script");
+    s.id="script_"+code;
+    s.src=`https://fundgz.1234567.com.cn/js/${code}.js`;
+    document.body.appendChild(s);
+
+    clearTimeout(loadTimer[code]);
+    loadTimer[code]=setTimeout(()=>{
+      if(fundData[code]?.status==="loading"){
+        if(source==="eastmoney"){ trySina(); }
+        else{ fundData[code]={status:"unsupported"}; render(); }
+      }
+    },5000);
+  } else if(source==="sina"){ trySina(); }
 }
 
 /* ===== JSONP回调 ===== */
-function jsonpgz(data){
-  fundData[data.fundcode]={status:"ok", ...data};
-  render();
-}
+function jsonpgz(data){ fundData[data.fundcode]={status:"ok", ...data, source:"eastmoney"}; render(); }
 
 /* ===== 渲染列表 ===== */
 function render(){
@@ -216,19 +184,18 @@ function render(){
     }
     if(d?.status==="unsupported") content=`<div class="badge">该基金无实时估值</div>`;
 
-    const card = document.createElement("div");
+    const card=document.createElement("div");
     card.className="card";
     card.innerHTML=`
       <div class="title">${d?.name||"基金 "+code}</div>
       ${content}
+      <span class="sourceBtn" onclick="changeFundSource('${code}')">${(fundSources[code]||globalSource).toUpperCase()}</span>
       <button class="deleteBtn" onclick="removeFund('${code}')">删除</button>`;
     box.appendChild(card);
 
-    /* ===== 拖拽排序 ===== */
-    let startY, currentY, dragging=false, placeholder;
-    card.addEventListener("touchstart", e=>{
-      startY=e.touches[0].clientY;
-    });
+    /* 拖拽排序 */
+    let startY,currentY,dragging=false,placeholder;
+    card.addEventListener("touchstart", e=>{ startY=e.touches[0].clientY; });
     card.addEventListener("touchmove", e=>{
       currentY=e.touches[0].clientY;
       const deltaY=currentY-startY;
@@ -237,7 +204,7 @@ function render(){
         card.classList.add("dragging");
         placeholder=document.createElement("div");
         placeholder.style.height=card.offsetHeight+"px";
-        box.insertBefore(placeholder, card.nextSibling);
+        box.insertBefore(placeholder,card.nextSibling);
       }
       if(dragging) card.style.transform=`translateY(${deltaY}px)`;
     });
@@ -245,28 +212,24 @@ function render(){
       if(dragging){
         card.style.transform="";
         card.classList.remove("dragging");
-        box.insertBefore(card, placeholder);
+        box.insertBefore(card,placeholder);
         placeholder.remove();
         dragging=false;
-        // 更新顺序
         const newOrder=[];
         box.querySelectorAll(".card").forEach(c=>{
           const title=c.querySelector(".title").innerText;
           const match=title.match(/\d{6}/);
-          if(match) newOrder.push(match[0]);
-          else {
-            // 尝试名称对应
-            fundCodes.forEach(f=>{if(fundData[f]?.name===title)newOrder.push(f);});
-          }
+          if(match)newOrder.push(match[0]);
+          else fundCodes.forEach(f=>{if(fundData[f]?.name===title)newOrder.push(f);});
         });
         if(newOrder.length===fundCodes.length){
           fundCodes=newOrder;
-          localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
+          localStorage.setItem("fundCodes",JSON.stringify(fundCodes));
         }
       }
     });
 
-    /* ===== 左滑删除 ===== */
+    /* 左滑删除 */
     let startX;
     card.addEventListener("touchstart", e=>{ startX=e.touches[0].clientX; card.classList.remove("showDelete"); });
     card.addEventListener("touchmove", e=>{
@@ -277,7 +240,7 @@ function render(){
   });
 }
 
-/* ===== 刷新 ===== */
+/* 刷新 */
 function refreshAll(){ fundCodes.forEach(loadFund); }
 
 render();
