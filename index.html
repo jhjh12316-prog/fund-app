@@ -71,14 +71,17 @@ function addFund(){
   document.getElementById("fundInput").value="";
   render(); loadFund(fundCodes[fundCodes.length-1]);
 }
+
+// -------------------- 删除基金 --------------------
 function removeFund(code){ 
-  fundCodes=fundCodes.filter(f=>f.code!==code); 
-  delete fundSources[code]; 
+  fundCodes = fundCodes.filter(f => f.code !== code);
   delete fundData[code];
-  localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); 
-  localStorage.setItem("fundSources",JSON.stringify(fundSources)); 
-  render(); 
+  delete fundSources[code];
+  localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
+  localStorage.setItem("fundSources", JSON.stringify(fundSources));
+  render();
 }
+
 function changeFundSource(code){ 
   const sources=["auto","eastmoney","sina","official"];
   const idx=(sources.indexOf(fundSources[code]||globalSource)+1)%sources.length;
@@ -101,7 +104,7 @@ function loadFund(f){
       fundData[code]={status:"failed"}; 
       render(); 
     } 
-  },10000); // 10秒超时
+  },10000);
 
   function loadSina(){ 
     fetch(`https://hq.sinajs.cn/list=f_${code}`).then(r=>r.text()).then(txt=>{
@@ -150,17 +153,36 @@ function jsonpgz(data){ fundData[data.fundcode]={status:"ok", ...data, source:"�
 
 // -------------------- 渲染列表 --------------------
 function render(){
-  const box=document.getElementById("fundList"); box.innerHTML="";
-  fundCodes.forEach(f=>{
-    const code=f.code; const d=fundData[code];
-    let content="";
-    if(!d) content=`<div style="opacity:.6">数据加载中…</div>`;
-    else if(d.status==="loading") content=`<div style="opacity:.6">数据加载中…</div>`;
-    else if(d.status==="ok"){ const cls=d.gszzl>=0?"up":"down";
-      content=`<div>净值：${d.dwjz}</div><div class="${cls}">涨跌：${d.gszzl}%</div><div class="time">${d.gztime||""}</div>`;}
-    else if(d.status==="failed") content=`<div class="badge">数据加载失败</div><button onclick="loadFund(f)">重试</button>`;
-    const card=document.createElement("div"); card.className="card";
-    card.innerHTML=`<div class="title">${d?.name||"基金 "+code}</div>${content}<span class="sourceBtn" onclick="changeFundSource('${code}')">${(fundSources[code]||globalSource).toUpperCase()}</span><div class="actions"><button onclick="moveFundUp('${code}')">↑ 上移</button><button onclick="moveFundDown('${code}')">↓ 下移</button><button onclick="removeFund('${code}')">删除</button></div>`;
+  const box = document.getElementById("fundList");
+  box.innerHTML = "";
+
+  fundCodes.forEach(f => {
+    const code = f.code;
+    const d = fundData[code];
+
+    let content = "";
+    if(!d || d.status === "loading") {
+      content = `<div style="opacity:.6">数据加载中…</div>`;
+    } else if(d.status === "ok") {
+      const cls = d.gszzl >= 0 ? "up" : "down";
+      content = `<div>净值：${d.dwjz}</div><div class="${cls}">涨跌：${d.gszzl}%</div><div class="time">${d.gztime||""}</div>`;
+    } else if(d.status === "failed") {
+      content = `<div class="badge">数据加载失败</div>
+                 <button onclick="loadFund({code:'${code}',type:'${f.type}',url:'${f.url||''}'})">重试</button>`;
+    }
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="title">${d?.name || "基金 " + code}</div>
+      ${content}
+      <span class="sourceBtn" onclick="changeFundSource('${code}')">${(fundSources[code]||globalSource).toUpperCase()}</span>
+      <div class="actions">
+        <button onclick="moveFundUp('${code}')">↑ 上移</button>
+        <button onclick="moveFundDown('${code}')">↓ 下移</button>
+        <button onclick="removeFund('${code}')">删除</button>
+      </div>
+    `;
     box.appendChild(card);
   });
 }
@@ -168,6 +190,7 @@ function render(){
 // -------------------- 上下移动 --------------------
 function moveFundUp(code){ const i=fundCodes.findIndex(f=>f.code===code); if(i>0){ [fundCodes[i-1],fundCodes[i]]=[fundCodes[i],fundCodes[i-1]]; localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); render(); } }
 function moveFundDown(code){ const i=fundCodes.findIndex(f=>f.code===code); if(i<fundCodes.length-1){ [fundCodes[i+1],fundCodes[i]]=[fundCodes[i],fundCodes[i+1]]; localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); render(); } }
+
 function refreshAll(){ fundCodes.forEach(loadFund); }
 
 render(); refreshAll(); setInterval(refreshAll,30000);
