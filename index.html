@@ -1,99 +1,111 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>持仓记录</title>
-
+<meta charset="UTF-8">
+<title>基金实时估值</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body {
-  margin: 0;
-  padding: 20px;
-  background: #0f1116;
-  color: #fff;
-  font-family: -apple-system, BlinkMacSystemFont;
+  background:#0f1116;
+  color:#fff;
+  font-family:-apple-system;
+  padding:20px;
 }
 .card {
-  background: #1a1d25;
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
+  background:#1a1d25;
+  border-radius:12px;
+  padding:16px;
+  margin-bottom:16px;
 }
-input, button {
-  padding: 10px;
-  border-radius: 8px;
-  border: none;
-  margin-right: 8px;
+input,button {
+  padding:10px;
+  border-radius:8px;
+  border:none;
 }
 button {
-  background: #6c6cff;
-  color: #fff;
+  background:#5b6cff;
+  color:#fff;
 }
 .item {
-  padding: 8px 0;
-  border-bottom: 1px solid #2a2d36;
+  padding:10px 0;
+  border-bottom:1px solid #2a2d36;
 }
+.red { color:#ff4d4f }
+.green { color:#2ecc71 }
 </style>
 </head>
 
 <body>
 
 <div class="card">
-  <h2>我的持仓</h2>
-  <input id="code" placeholder="基金代码">
-  <input id="amount" placeholder="金额">
-  <button id="addBtn">添加</button>
+  <h2>添加基金</h2>
+  <input id="code" placeholder="基金代码 如 161725">
+  <button id="add">添加</button>
 </div>
 
 <div class="card">
-  <h3>搜索</h3>
-  <input id="search" placeholder="输入代码搜索">
-</div>
-
-<div class="card">
-  <h3>持仓列表</h3>
+  <h2>我的自选</h2>
   <div id="list"></div>
 </div>
 
 <script>
-const listEl = document.getElementById("list");
-const codeEl = document.getElementById("code");
-const amountEl = document.getElementById("amount");
-const searchEl = document.getElementById("search");
+let funds = JSON.parse(localStorage.getItem("funds") || "[]");
+const list = document.getElementById("list");
 
-let data = JSON.parse(localStorage.getItem("holdings") || "[]");
-
-function render(filter = "") {
-  listEl.innerHTML = "";
-  data
-    .filter(i => i.code.includes(filter))
-    .forEach(i => {
-      const div = document.createElement("div");
-      div.className = "item";
-      div.textContent = `${i.code} ｜ ${i.amount}`;
-      listEl.appendChild(div);
-    });
+function save() {
+  localStorage.setItem("funds", JSON.stringify(funds));
 }
 
-document.getElementById("addBtn").onclick = () => {
-  const code = codeEl.value.trim();
-  const amount = amountEl.value.trim();
-  if (!code || !amount) {
-    alert("别空着，浏览器不是算命的");
+function fetchFund(code, cb) {
+  const script = document.createElement("script");
+  const callback = "cb_" + Math.random().toString(36).slice(2);
+  window[callback] = function(data) {
+    cb(data);
+    delete window[callback];
+    script.remove();
+  };
+  script.src =
+    `https://fundgz.1234567.com.cn/js/${code}.js?rt=${Date.now()}&callback=${callback}`;
+  document.body.appendChild(script);
+}
+
+function render() {
+  list.innerHTML = "";
+  funds.forEach(code => {
+    fetchFund(code, data => {
+      if (!data || !data.fundcode) return;
+      const rate = parseFloat(data.gszzl);
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `
+        <strong>${data.name}</strong> (${code})<br>
+        估值：${data.gsz}　
+        <span class="${rate >= 0 ? 'red' : 'green'}">
+          ${rate >= 0 ? '+' : ''}${rate}%
+        </span>
+        <br>
+        时间：${data.gstime}
+      `;
+      list.appendChild(div);
+    });
+  });
+}
+
+document.getElementById("add").onclick = () => {
+  const code = document.getElementById("code").value.trim();
+  if (!/^\d{6}$/.test(code)) {
+    alert("基金代码必须是 6 位数字");
     return;
   }
-  data.push({ code, amount });
-  localStorage.setItem("holdings", JSON.stringify(data));
-  codeEl.value = "";
-  amountEl.value = "";
-  render(searchEl.value.trim());
-};
-
-searchEl.oninput = () => {
-  render(searchEl.value.trim());
+  if (!funds.includes(code)) {
+    funds.push(code);
+    save();
+    render();
+  }
 };
 
 render();
+setInterval(render, 60000); // 每分钟刷新
 </script>
 
 </body>
