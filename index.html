@@ -1,151 +1,100 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<title>基金估值</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>持仓记录</title>
+
 <style>
-body{margin:0;background:#0f0f14;color:#eee;font-family:system-ui}
-.wrap{max-width:420px;margin:auto;padding:16px}
-.card{background:linear-gradient(135deg,#6b7cff,#8e5cff);
-border-radius:14px;padding:16px;margin-bottom:14px}
-.box{background:#1b1b22;border-radius:12px;padding:14px;margin-bottom:14px}
-.item{display:flex;justify-content:space-between;
-padding:10px 0;border-bottom:1px solid #333}
-.item:last-child{border:none}
-.red{color:#ff6b6b}
-.green{color:#4cffb0}
-input,button{background:#2a2a33;color:#eee;
-border:none;border-radius:6px;padding:6px}
-input{width:90px}
-button{margin-left:6px}
-small{color:#aaa}
+body {
+  margin: 0;
+  padding: 20px;
+  background: #0f1116;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont;
+}
+.card {
+  background: #1a1d25;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+input, button {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  margin-right: 8px;
+}
+button {
+  background: #6c6cff;
+  color: #fff;
+}
+.item {
+  padding: 8px 0;
+  border-bottom: 1px solid #2a2d36;
+}
 </style>
 </head>
 
 <body>
-<div class="wrap">
 
 <div class="card">
-  <div>总资产</div>
-  <h2 id="total">0.00</h2>
-  <small>当日盈亏：<span id="today">0.00</span></small>
+  <h2>我的持仓</h2>
+  <input id="code" placeholder="基金代码">
+  <input id="amount" placeholder="金额">
+  <button id="addBtn">添加</button>
 </div>
 
-<div class="box">
-  <h3>我的持仓</h3>
+<div class="card">
+  <h3>搜索</h3>
+  <input id="search" placeholder="输入代码搜索">
+</div>
+
+<div class="card">
+  <h3>持仓列表</h3>
   <div id="list"></div>
-
-  <div style="margin-top:10px">
-    <input id="code" placeholder="161725 / SPY">
-    <input id="money" placeholder="金额">
-    <button onclick="add()">添加</button>
-    <button onclick="exportCSV()">导出</button>
-  </div>
-</div>
-
-<div class="box">
-  <h3>夜盘参考</h3>
-  <div id="night">加载中…</div>
-</div>
-
 </div>
 
 <script>
-const proxy = url =>
-  "https://api.allorigins.win/raw?url=" + encodeURIComponent(url)
+const listEl = document.getElementById("list");
+const codeEl = document.getElementById("code");
+const amountEl = document.getElementById("amount");
+const searchEl = document.getElementById("search");
 
-let funds = JSON.parse(localStorage.getItem("funds")||"[]")
-function save(){localStorage.setItem("funds",JSON.stringify(funds))}
+let data = JSON.parse(localStorage.getItem("holdings") || "[]");
 
-async function china(code){
-  let r = await fetch(proxy(
-    `https://fundgz.1234567.com.cn/js/${code}.js`
-  ))
-  let t = await r.text()
-  let j = eval(t.replace("jsonpgz(","").replace(");",""))
-  return {name:j.name, change:+j.gszzl}
+function render(filter = "") {
+  listEl.innerHTML = "";
+  data
+    .filter(i => i.code.includes(filter))
+    .forEach(i => {
+      const div = document.createElement("div");
+      div.className = "item";
+      div.textContent = `${i.code} ｜ ${i.amount}`;
+      listEl.appendChild(div);
+    });
 }
 
-async function global(symbol){
-  let r = await fetch(proxy(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`
-  ))
-  let j = await r.json()
-  let m = j.chart.result[0].meta
-  return {
-    name:symbol,
-    change:(m.regularMarketPrice-m.previousClose)/m.previousClose*100
+document.getElementById("addBtn").onclick = () => {
+  const code = codeEl.value.trim();
+  const amount = amountEl.value.trim();
+  if (!code || !amount) {
+    alert("别空着，浏览器不是算命的");
+    return;
   }
-}
+  data.push({ code, amount });
+  localStorage.setItem("holdings", JSON.stringify(data));
+  codeEl.value = "";
+  amountEl.value = "";
+  render(searchEl.value.trim());
+};
 
-async function render(){
-  let total=0,today=0
-  list.innerHTML=""
-  for(let f of funds){
-    try{
-      let d = /^\d+$/.test(f.code)
-        ? await china(f.code)
-        : await global(f.code)
+searchEl.oninput = () => {
+  render(searchEl.value.trim());
+};
 
-      let day = f.money*d.change/100
-      total += f.money
-      today += day
-
-      let div=document.createElement("div")
-      div.className="item"
-      div.innerHTML=`
-        <div>${d.name}<br><small>${f.money}</small></div>
-        <div class="${day>=0?'red':'green'}">
-          ${(day>=0?'+':'')+day.toFixed(2)}
-        </div>`
-      list.appendChild(div)
-    }catch(e){}
-  }
-  total += today
-  totalEl.innerText = total.toFixed(2)
-  todayEl.innerText =
-    (today>=0?'+':'')+today.toFixed(2)
-}
-
-function add(){
-  let c=code.value.trim()
-  let m=+money.value
-  if(!c||!m)return
-  funds.push({code:c,money:m})
-  save()
-  render()
-}
-
-async function night(){
-  try{
-    let dxy=await global("DX-Y.NYB")
-    let gc=await global("GC=F")
-    night.innerHTML=
-      `美元指数 ${dxy.change.toFixed(2)}%<br>
-       黄金 ${gc.change.toFixed(2)}%<br><br>`+
-      (dxy.change<0&&gc.change>0
-        ?"资源偏多"
-        :"偏防御")
-  }catch{
-    night.innerText="夜盘数据不可用"
-  }
-}
-
-function exportCSV(){
-  let csv="代码,金额\n"+funds.map(f=>`${f.code},${f.money}`).join("\n")
-  let a=document.createElement("a")
-  a.href=URL.createObjectURL(new Blob([csv]))
-  a.download="funds.csv"
-  a.click()
-}
-
-const totalEl=document.getElementById("total")
-const todayEl=document.getElementById("today")
-
-render()
-night()
-setInterval(render,60000)
+render();
 </script>
+
 </body>
 </html>
