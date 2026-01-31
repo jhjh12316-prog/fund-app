@@ -3,43 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>多源基金自选估值（国内+海外）</title>
+<title>国内+海外基金估值</title>
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC"; background: linear-gradient(180deg,#0f1115,#1c1c22); color: #eee; margin: 0; padding: 14px; }
-.card { background: #1e1e28; border-radius:16px; padding:16px; margin-bottom:14px; box-shadow:0 4px 10px rgba(0,0,0,0.3); position: relative; }
-.night .card { opacity:0.8; }
+body { font-family:-apple-system, BlinkMacSystemFont,"PingFang SC"; background:#0f1115; color:#eee; padding:14px; margin:0; }
+.card { background:#1e1e28; border-radius:16px; padding:16px; margin-bottom:14px; box-shadow:0 4px 10px rgba(0,0,0,0.3); position:relative; }
 .title { font-size:18px; font-weight:700; margin-bottom:8px; }
 .up { color:#ff4d4f; font-weight:600; }
 .down { color:#4cd964; font-weight:600; }
-.time, .badge { font-size:12px; opacity:0.8; margin-top:4px; }
 .input-box, .top-actions { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
 input { flex:1; padding:12px; border-radius:12px; border:none; font-size:15px; background:#2a2a35; color:#fff; }
-button { padding:10px 16px; border-radius:12px; border:none; background:#3a3a4a; color:#fff; font-size:14px; cursor:pointer; transition: background 0.15s; }
-button:hover { background:#505060; }
-.actions { margin-top:10px; display:flex; gap:6px; flex-wrap:wrap; }
-.badge { color:#ff9f0a; font-weight:600; }
-.sourceBtn { position:absolute; top:10px; right:16px; padding:4px 8px; border-radius:8px; font-size:12px; background:#3a3a60; cursor:pointer; color:#fff; }
+button { padding:10px 16px; border-radius:12px; border:none; background:#3a3a4a; color:#fff; cursor:pointer; transition:.15s; }
+button:hover{background:#505060;}
+.actions{margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;}
+.sourceBtn {position:absolute; top:10px; right:16px; padding:4px 8px; border-radius:8px; font-size:12px; background:#3a3a60; cursor:pointer; color:#fff;}
 </style>
 </head>
 <body>
 
 <div class="card">
-  <div class="input-box">
-    <input id="fundInput" placeholder="输入6位基金代码或海外代码">
-    <button onclick="addFund()">添加</button>
-    <button onclick="refreshAll()">刷新</button>
-  </div>
-  <div class="top-actions">
-    <button onclick="toggleUnsupported()">显示 / 隐藏 无估值基金</button>
-    <label style="color:#fff">全局默认数据源：
-      <select id="globalSource" onchange="setGlobalSource(this.value)">
-        <option value="auto">自动</option>
-        <option value="eastmoney">东财</option>
-        <option value="sina">新浪</option>
-        <option value="yahoo">雅虎财经</option>
-      </select>
-    </label>
-  </div>
+<div class="input-box">
+<input id="fundInput" placeholder="输入基金代码(国内/海外)">
+<button onclick="addFund()">添加</button>
+<button onclick="refreshAll()">刷新</button>
+</div>
+<div class="top-actions">
+<button onclick="toggleUnsupported()">显示/隐藏 无估值基金</button>
+<label style="color:#fff">全局默认数据源：
+<select id="globalSource" onchange="setGlobalSource(this.value)">
+<option value="auto">自动</option>
+<option value="eastmoney">东财</option>
+<option value="sina">新浪</option>
+<option value="official">官网(海外)</option>
+</select>
+</label>
+</div>
 </div>
 
 <div id="fundList"></div>
@@ -47,48 +44,38 @@ button:hover { background:#505060; }
 <script>
 let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || ["161725","020712","006479"];
 let fundSources = JSON.parse(localStorage.getItem("fundSources")) || {};
-const fundData = {};
+const fundData={};
 let showUnsupported=false;
 let globalSource=localStorage.getItem("globalSource")||"auto";
-document.getElementById("globalSource").value = globalSource;
+document.getElementById("globalSource").value=globalSource;
 
-function setGlobalSource(val){ globalSource=val; localStorage.setItem("globalSource",val); refreshAll(); }
+function setGlobalSource(val){globalSource=val; localStorage.setItem("globalSource",val); refreshAll();}
 
-/* 判断海外基金 */
-function isOverseas(code){ return code.startsWith("006") || code.startsWith("020") || code.startsWith("007"); }
+function isOverseas(code){ return ["020712","006479"].includes(code); }
 
-/* 添加基金 */
 function addFund(){
-  const input=document.getElementById("fundInput");
-  const code=input.value.trim();
-  if(!/^\d{6}$/.test(code) && !isOverseas(code)){ alert("请输入6位国内基金代码或海外基金代码"); return; }
-  if(fundCodes.includes(code)){ alert("已经加过了"); return; }
-  fundCodes.push(code);
-  fundSources[code]=globalSource;
+  const code=document.getElementById("fundInput").value.trim();
+  if(!/^\d{6}$/.test(code) && !isOverseas(code)){ alert("请输入国内/海外基金代码"); return; }
+  if(fundCodes.includes(code)){ alert("已添加过"); return; }
+  fundCodes.push(code); fundSources[code]=globalSource;
   localStorage.setItem("fundCodes",JSON.stringify(fundCodes));
   localStorage.setItem("fundSources",JSON.stringify(fundSources));
-  input.value="";
-  render();
-  loadFund(code);
+  document.getElementById("fundInput").value="";
+  render(); loadFund(code);
 }
 
-/* 删除基金 */
 function removeFund(code){ fundCodes=fundCodes.filter(c=>c!==code); delete fundSources[code]; localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); localStorage.setItem("fundSources",JSON.stringify(fundSources)); delete fundData[code]; render(); }
 
-/* 切换数据源 */
-function changeFundSource(code){ 
-  const sources=["auto","eastmoney","sina","yahoo"];
-  const cur=fundSources[code]||globalSource;
-  const idx=(sources.indexOf(cur)+1)%sources.length;
+function changeFundSource(code){
+  const sources=["auto","eastmoney","sina","official"];
+  const idx=(sources.indexOf(fundSources[code]||globalSource)+1)%sources.length;
   fundSources[code]=sources[idx];
   localStorage.setItem("fundSources",JSON.stringify(fundSources));
   loadFund(code);
 }
 
-/* 显示隐藏无估值 */
 function toggleUnsupported(){ showUnsupported=!showUnsupported; render(); }
 
-/* 加载基金数据 */
 function loadFund(code){
   fundData[code]={status:"loading"}; render();
   const source=fundSources[code]||globalSource;
@@ -96,88 +83,57 @@ function loadFund(code){
   function loadSina(){ 
     fetch(`https://hq.sinajs.cn/list=f_${code}`).then(r=>r.text()).then(txt=>{
       const match=txt.match(/"([^"]+)"/);
-      if(match){
-        const arr=match[1].split(",");
-        if(arr.length>3){ fundData[code]={status:"ok", name:arr[0], dwjz:arr[3], gszzl:parseFloat(arr[2]), gztime:arr[1], source:"新浪"}; }
-        else fundData[code]={status:"unsupported"};
-      }else fundData[code]={status:"unsupported"};
-      render();
+      if(match){ const arr=match[1].split(","); if(arr.length>3) fundData[code]={status:"ok",name:arr[0],dwjz:arr[3],gszzl:parseFloat(arr[2]),gztime:arr[1],source:"新浪"}; else fundData[code]={status:"unsupported"}; }
+      else fundData[code]={status:"unsupported"}; render();
     }).catch(()=>{ fundData[code]={status:"unsupported"}; render(); });
   }
 
   function loadEastmoney(){ 
     const s=document.createElement("script");
     s.src=`https://fundgz.1234567.com.cn/js/${code}.js`;
-    s.id="script_"+code;
-    document.body.appendChild(s);
-    setTimeout(()=>{ if(fundData[code]?.status==="loading"){ if(source==="eastmoney"||source==="auto") loadSina(); else fundData[code]={status:"unsupported"}; render(); } },5000);
+    s.id="script_"+code; document.body.appendChild(s);
+    setTimeout(()=>{ if(fundData[code].status==="loading"){ if(source==="auto") loadSina(); else fundData[code]={status:"unsupported"}; render(); } },5000);
   }
 
-  function loadYahoo(){ 
-    fetch(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${code}.HK,${code}`).then(r=>r.json()).then(j=>{
-      if(j.quoteResponse && j.quoteResponse.result.length>0){
-        const q=j.quoteResponse.result[0];
-        fundData[code]={status:"ok", name:q.shortName||code, dwjz:q.regularMarketPrice, gszzl:q.regularMarketChangePercent, gztime:new Date(q.regularMarketTime*1000).toLocaleTimeString(), source:"Yahoo"};
-      }else fundData[code]={status:"unsupported"};
-      render();
-    }).catch(()=>{ fundData[code]={status:"unsupported"}; render(); });
+  function loadOfficial(){ // 海外基金官网净值抓取示例
+    if(code==="020712"){ // 日本基金
+      fetch("https://fund.southmoney.com/funddata/020712.json").then(r=>r.json()).then(j=>{
+        fundData[code]={status:"ok",name:j.name,dwjz:j.nav,gszzl:j.changePercent,gztime:j.date,source:"官网"};
+        render();
+      }).catch(()=>{ fundData[code]={status:"unsupported"}; render(); });
+    } else if(code==="006479"){ // 纳斯达克基金
+      fetch("https://fund.jpmorgan.com/006479.json").then(r=>r.json()).then(j=>{
+        fundData[code]={status:"ok",name:j.name,dwjz:j.nav,gszzl:j.changePercent,gztime:j.date,source:"官网"};
+        render();
+      }).catch(()=>{ fundData[code]={status:"unsupported"}; render(); });
+    } else fundData[code]={status:"unsupported"}; render();
   }
 
-  if(isOverseas(code)){
-    if(source==="auto" || source==="yahoo") loadYahoo();
-    else fundData[code]={status:"unsupported"};
-  }else{
-    if(source==="auto" || source==="eastmoney") loadEastmoney();
-    else if(source==="sina") loadSina();
-    else fundData[code]={status:"unsupported"};
-  }
+  if(isOverseas(code)){ if(source==="auto"||source==="official") loadOfficial(); else fundData[code]={status:"unsupported"}; render(); }
+  else{ if(source==="auto"||source==="eastmoney") loadEastmoney(); else if(source==="sina") loadSina(); else fundData[code]={status:"unsupported"}; render(); }
 }
 
-/* JSONP回调 */
 function jsonpgz(data){ fundData[data.fundcode]={status:"ok", ...data, source:"东财"}; render(); }
 
-/* 渲染列表 */
 function render(){
-  const box=document.getElementById("fundList");
-  box.innerHTML="";
-  fundCodes.forEach((code,i)=>{
-    const d=fundData[code];
-    if(d?.status==="unsupported"&&!showUnsupported) return;
+  const box=document.getElementById("fundList"); box.innerHTML="";
+  fundCodes.forEach(code=>{
+    const d=fundData[code]; if(d?.status==="unsupported"&&!showUnsupported) return;
     let content=`<div style="opacity:.6">数据加载中…</div>`;
-    if(d?.status==="ok"){
-      const cls=d.gszzl>=0?"up":"down";
-      content=isOverseas(code)?
-        `<div>价格：${d.dwjz}</div><div class="${cls}">涨幅：${d.gszzl}%</div><div class="time">${d.gztime||""}</div>`:
-        `<div>估值：${d.dwjz}</div><div class="${cls}">↑${d.gszzl}%</div><div class="time">${d.gztime||""}</div>`;
-    }
-    if(d?.status==="unsupported") content=`<div class="badge">该基金无实时估值</div>`;
-
-    const card=document.createElement("div");
-    card.className="card";
-    card.innerHTML=`
-      <div class="title">${d?.name||"基金 "+code}</div>
-      ${content}
-      <span class="sourceBtn" onclick="changeFundSource('${code}')">${(fundSources[code]||globalSource).toUpperCase()}</span>
-      <div class="actions">
-        <button onclick="moveFundUp('${code}')">↑ 上移</button>
-        <button onclick="moveFundDown('${code}')">↓ 下移</button>
-        <button onclick="removeFund('${code}')">删除</button>
-      </div>`;
+    if(d?.status==="ok"){ const cls=d.gszzl>=0?"up":"down";
+      content=`<div>净值：${d.dwjz}</div><div class="${cls}">涨跌：${d.gszzl}%</div><div class="time">${d.gztime||""}</div>`;}
+    if(d?.status==="unsupported") content=`<div class="badge">该基金无估值</div>`;
+    const card=document.createElement("div"); card.className="card";
+    card.innerHTML=`<div class="title">${d?.name||"基金 "+code}</div>${content}<span class="sourceBtn" onclick="changeFundSource('${code}')">${(fundSources[code]||globalSource).toUpperCase()}</span><div class="actions"><button onclick="moveFundUp('${code}')">↑ 上移</button><button onclick="moveFundDown('${code}')">↓ 下移</button><button onclick="removeFund('${code}')">删除</button></div>`;
     box.appendChild(card);
   });
 }
 
-/* 上下移动 */
 function moveFundUp(code){ const i=fundCodes.indexOf(code); if(i>0){ [fundCodes[i-1],fundCodes[i]]=[fundCodes[i],fundCodes[i-1]]; localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); render(); } }
 function moveFundDown(code){ const i=fundCodes.indexOf(code); if(i<fundCodes.length-1){ [fundCodes[i+1],fundCodes[i]]=[fundCodes[i],fundCodes[i+1]]; localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); render(); } }
-
-/* 刷新 */
 function refreshAll(){ fundCodes.forEach(loadFund); }
 
-render();
-refreshAll();
-setInterval(refreshAll,30000);
+render(); refreshAll(); setInterval(refreshAll,30000);
 </script>
-
 </body>
 </html>
