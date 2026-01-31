@@ -3,218 +3,214 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>基金自选估值（容错优化版）</title>
+<title>基金自选估值（多源 + 按钮操作）</title>
 <style>
-body { font-family:-apple-system, BlinkMacSystemFont,"PingFang SC"; background:#0f1115; color:#eee; padding:14px; margin:0; }
-.card { background:#1e1e28; border-radius:16px; padding:16px; margin-bottom:14px; box-shadow:0 4px 10px rgba(0,0,0,0.3); position:relative; }
-.title { font-size:18px; font-weight:700; margin-bottom:8px; }
-.up { color:#ff4d4f; font-weight:600; }
-.down { color:#4cd964; font-weight:600; }
-.input-box, .top-actions { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
-input { flex:1; padding:12px; border-radius:12px; border:none; font-size:15px; background:#2a2a35; color:#fff; }
-button { padding:10px 16px; border-radius:12px; border:none; background:#3a3a4a; color:#fff; cursor:pointer; transition:.15s; }
-button:hover{background:#505060;}
-.actions{margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;}
-.sourceBtn {position:absolute; top:10px; right:16px; padding:4px 8px; border-radius:8px; font-size:12px; background:#3a3a60; cursor:pointer; color:#fff;}
-.badge {padding:4px 8px; border-radius:8px; background:#444; display:inline-block; margin-top:6px;}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC";
+  background: linear-gradient(180deg,#0f1115,#1c1c22);
+  color: #eee;
+  margin: 0;
+  padding: 14px;
+}
+.card {
+  background: #1e1e28;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  position: relative;
+}
+.night .card { opacity: 0.8; }
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.up { color: #ff4d4f; font-weight:600; }
+.down { color: #4cd964; font-weight:600; }
+.time, .badge { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+.input-box, .top-actions { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+input { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 15px; background: #2a2a35; color: #fff; }
+button { padding: 10px 16px; border-radius: 12px; border: none; background: #3a3a4a; color: #fff; font-size: 14px; cursor: pointer; transition: background 0.15s; }
+button:hover { background: #505060; }
+.actions { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.badge { color: #ff9f0a; font-weight: 600; }
+.sourceBtn { position:absolute; top:10px; right:16px; padding:4px 8px; border-radius:8px; font-size:12px; background:#3a3a60; cursor:pointer; color:#fff; }
 </style>
 </head>
 <body>
 
 <div class="card">
-<div class="input-box">
-<input id="fundInput" placeholder="输入基金代码">
-<button onclick="addFund()">添加</button>
-<button onclick="refreshAll()">刷新</button>
-</div>
-<div class="top-actions">
-<button onclick="toggleUnsupported()">显示/隐藏 无估值基金</button>
-<label style="color:#fff">全局默认数据源：
-<select id="globalSource" onchange="setGlobalSource(this.value)">
-<option value="auto">自动</option>
-<option value="eastmoney">东财</option>
-<option value="sina">新浪</option>
-<option value="official">官网(海外)</option>
-</select>
-</label>
-</div>
+  <div class="input-box">
+    <input id="fundInput" placeholder="输入6位基金代码">
+    <button onclick="addFund()">添加</button>
+    <button onclick="refreshAll()">刷新</button>
+  </div>
+  <div class="top-actions">
+    <button onclick="toggleUnsupported()">显示 / 隐藏 无估值基金</button>
+    <label style="color:#fff">全局默认数据源：
+      <select id="globalSource" onchange="setGlobalSource(this.value)">
+        <option value="auto">自动</option>
+        <option value="eastmoney">东财</option>
+        <option value="sina">新浪</option>
+      </select>
+    </label>
+  </div>
 </div>
 
 <div id="fundList"></div>
 
 <script>
-// -------------------- 配置 --------------------
-let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || [
-  {code:"161725",type:"domestic"},
-  {code:"020712",type:"overseas",url:"https://fund.southmoney.com/funddata/020712.json"},
-  {code:"006479",type:"overseas",url:"https://fund.jpmorgan.com/006479.json"}
-];
+let fundCodes = JSON.parse(localStorage.getItem("fundCodes")) || ["161725"];
 let fundSources = JSON.parse(localStorage.getItem("fundSources")) || {};
-const fundData={};
-let showUnsupported=false;
-let globalSource=localStorage.getItem("globalSource")||"auto";
-document.getElementById("globalSource").value=globalSource;
+const fundData = {};
+const loadTimer = {};
+let showUnsupported = false;
+let globalSource = localStorage.getItem("globalSource") || "auto";
 
-// -------------------- 通用函数 --------------------
-function setGlobalSource(val){globalSource=val; localStorage.setItem("globalSource",val); refreshAll();}
-function toggleUnsupported(){showUnsupported=!showUnsupported; render();}
-function isOverseas(f){return f.type==="overseas";}
+document.getElementById("globalSource").value = globalSource;
 
-// -------------------- 添加基金（容错版） --------------------
+function setGlobalSource(val){ globalSource=val; localStorage.setItem("globalSource",val); refreshAll(); }
+
+const now = new Date();
+const hour = now.getHours();
+const isTrading = hour>=9 && hour<15;
+if(!isTrading) document.body.classList.add("night");
+
+/* 添加基金 */
 function addFund(){
-  const input = document.getElementById("fundInput").value.trim();
-  if(!input) return;
-
-  const exists = fundCodes.find(f => f.code === input);
-  if(exists){ alert("已添加过"); return; }
-
-  const newFund = {code: input, type: "domestic"};
-  fundCodes.push(newFund);
-  fundSources[input] = globalSource;
-
-  try {
-    localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
-    localStorage.setItem("fundSources", JSON.stringify(fundSources));
-  } catch(e) {
-    console.error("localStorage 写入失败:", e);
-    alert("警告：浏览器存储已满，部分数据可能无法保存");
-  }
-
-  document.getElementById("fundInput").value = "";
-
-  try {
-    render(); 
-    loadFund(newFund);
-  } catch(e){
-    console.error("添加基金渲染失败:", e);
-    alert("添加基金成功，但页面渲染异常，请刷新页面");
-  }
+  const input=document.getElementById("fundInput");
+  const code=input.value.trim();
+  if(!/^\d{6}$/.test(code)){ alert("请输入6位基金代码"); return; }
+  if(fundCodes.includes(code)){ alert("已经加过了"); return; }
+  fundCodes.push(code);
+  fundSources[code]=globalSource;
+  localStorage.setItem("fundCodes",JSON.stringify(fundCodes));
+  localStorage.setItem("fundSources",JSON.stringify(fundSources));
+  input.value="";
+  render();
+  loadFund(code);
 }
 
-// -------------------- 删除基金 --------------------
-function removeFund(code){ 
-  fundCodes = fundCodes.filter(f => f.code !== code);
-  delete fundData[code];
+/* 删除基金 */
+function removeFund(code){
+  fundCodes=fundCodes.filter(c=>c!==code);
   delete fundSources[code];
-  try {
-    localStorage.setItem("fundCodes", JSON.stringify(fundCodes));
-    localStorage.setItem("fundSources", JSON.stringify(fundSources));
-  } catch(e){ console.error("localStorage 写入失败:", e); }
+  localStorage.setItem("fundCodes",JSON.stringify(fundCodes));
+  localStorage.setItem("fundSources",JSON.stringify(fundSources));
+  delete fundData[code];
   render();
 }
 
-function changeFundSource(code){ 
-  const sources=["auto","eastmoney","sina","official"];
-  const idx=(sources.indexOf(fundSources[code]||globalSource)+1)%sources.length;
+/* 切换基金数据源 */
+function changeFundSource(code){
+  const sources=["auto","eastmoney","sina"];
+  const cur=fundSources[code]||globalSource;
+  const idx=(sources.indexOf(cur)+1)%sources.length;
   fundSources[code]=sources[idx];
-  try { localStorage.setItem("fundSources",JSON.stringify(fundSources)); } catch(e){console.error(e);}
-  const f=fundCodes.find(f=>f.code===code);
-  loadFund(f);
+  localStorage.setItem("fundSources",JSON.stringify(fundSources));
+  loadFund(code);
 }
 
-// -------------------- 加载基金 --------------------
-function loadFund(f){
-  const code=f.code;
-  const type=f.type;
-  const url=f.url;
-  fundData[code]={status:"loading"}; render();
+/* 显示隐藏无估值 */
+function toggleUnsupported(){ showUnsupported=!showUnsupported; render(); }
+
+/* 加载基金数据 */
+function loadFund(code){
+  const old=document.getElementById("script_"+code);
+  if(old) old.remove();
+  fundData[code]={status:"loading"};
+  render();
+
   const source=fundSources[code]||globalSource;
 
-  let timeoutHandle = setTimeout(()=>{ 
-    if(fundData[code]?.status==="loading"){ 
-      fundData[code]={status:"failed"}; 
-      render(); 
-    } 
-  },10000);
-
-  function loadSina(){ 
+  function trySina(){ 
     fetch(`https://hq.sinajs.cn/list=f_${code}`).then(r=>r.text()).then(txt=>{
-      clearTimeout(timeoutHandle);
       const match=txt.match(/"([^"]+)"/);
-      if(match){ const arr=match[1].split(","); 
-        if(arr.length>3) fundData[code]={status:"ok",name:arr[0],dwjz:arr[3],gszzl:parseFloat(arr[2]),gztime:arr[1],source:"新浪"}; 
-        else fundData[code]={status:"failed"};}
-      else fundData[code]={status:"failed"}; 
+      if(match){
+        const arr=match[1].split(",");
+        if(arr.length>3){
+          fundData[code]={status:"ok", name:arr[0], dwjz:arr[3], gszzl:parseFloat(arr[2]), gztime:arr[1], source:"sina"};
+        }else fundData[code]={status:"unsupported"};
+      }else fundData[code]={status:"unsupported"};
       render();
-    }).catch(()=>{clearTimeout(timeoutHandle); fundData[code]={status:"failed"}; render();});
+    }).catch(()=>{fundData[code]={status:"unsupported"}; render();});
   }
 
-  function loadEastmoney(){ 
+  if(source==="eastmoney" || (source==="auto")){
     const s=document.createElement("script");
-    s.src=`https://fundgz.1234567.com.cn/js/${code}.js`; s.id="script_"+code; document.body.appendChild(s);
-    setTimeout(()=>{ 
-      if(fundData[code].status==="loading"){ 
-        if(source==="auto") loadSina(); 
-        else {fundData[code]={status:"failed"}; render();} 
-      } 
+    s.id="script_"+code;
+    s.src=`https://fundgz.1234567.com.cn/js/${code}.js`;
+    document.body.appendChild(s);
+
+    clearTimeout(loadTimer[code]);
+    loadTimer[code]=setTimeout(()=>{
+      if(fundData[code]?.status==="loading"){
+        if(source==="eastmoney" || source==="auto"){ trySina(); }
+        else{ fundData[code]={status:"unsupported"}; render(); }
+      }
     },5000);
-  }
-
-  function loadOfficial(){ 
-    if(!url){ fundData[code]={status:"failed"}; render(); return; }
-    fetch(url).then(r=>r.json()).then(j=>{
-      clearTimeout(timeoutHandle);
-      fundData[code]={status:"ok",name:j.name,dwjz:j.nav,gszzl:j.changePercent,gztime:j.date,source:"官网"};
-      render();
-    }).catch(()=>{clearTimeout(timeoutHandle); fundData[code]={status:"failed"}; render();});
-  }
-
-  if(type==="overseas"){ 
-    if(source==="auto"||source==="official") loadOfficial(); 
-    else {fundData[code]={status:"failed"}; render();}
-  } else { 
-    if(source==="auto"||source==="eastmoney") loadEastmoney(); 
-    else if(source==="sina") loadSina(); 
-    else {fundData[code]={status:"failed"}; render();} 
-  }
+  } else if(source==="sina"){ trySina(); }
 }
 
-// JSONP回调
-function jsonpgz(data){ fundData[data.fundcode]={status:"ok", ...data, source:"东财"}; render(); }
+/* JSONP回调 */
+function jsonpgz(data){ fundData[data.fundcode]={status:"ok", ...data, source:"eastmoney"}; render(); }
 
-// -------------------- 渲染列表 --------------------
+/* 渲染列表 */
 function render(){
-  const box = document.getElementById("fundList");
-  box.innerHTML = "";
+  const box=document.getElementById("fundList");
+  box.innerHTML="";
+  fundCodes.forEach((code,i)=>{
+    const d=fundData[code];
+    if(d?.status==="unsupported"&&!showUnsupported) return;
 
-  fundCodes.forEach(f => {
-    const code = f.code;
-    const d = fundData[code];
-
-    let content = "";
-    if(!d || d.status === "loading") {
-      content = `<div style="opacity:.6">数据加载中…</div>`;
-    } else if(d.status === "ok") {
-      const cls = d.gszzl >= 0 ? "up" : "down";
-      content = `<div>净值：${d.dwjz}</div><div class="${cls}">涨跌：${d.gszzl}%</div><div class="time">${d.gztime||""}</div>`;
-    } else if(d.status === "failed") {
-      content = `<div class="badge">数据加载失败</div>
-                 <button onclick="loadFund({code:'${code}',type:'${f.type}',url:'${f.url||''}'})">重试</button>`;
+    let content=`<div style="opacity:.6">数据加载中…</div>`;
+    if(d?.status==="ok"){
+      const cls=d.gszzl>=0?"up":"down";
+      if(isTrading){
+        content=`<div>估值：${d.gsz||d.dwjz}</div>
+                 <div class="${cls}">↑${d.gszzl}%</div>
+                 <div class="time">${d.gztime||""}</div>`;
+      }else{
+        content=`<div class="badge">盘后参考</div>
+                 <div>单位净值：${d.dwjz}</div>
+                 <div class="${cls}">昨日涨跌：${d.gszzl}%</div>`;
+      }
     }
+    if(d?.status==="unsupported") content=`<div class="badge">该基金无实时估值</div>`;
 
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="title">${d?.name || "基金 " + code}</div>
+    const card=document.createElement("div");
+    card.className="card";
+    card.innerHTML=`
+      <div class="title">${d?.name||"基金 "+code}</div>
       ${content}
       <span class="sourceBtn" onclick="changeFundSource('${code}')">${(fundSources[code]||globalSource).toUpperCase()}</span>
       <div class="actions">
         <button onclick="moveFundUp('${code}')">↑ 上移</button>
         <button onclick="moveFundDown('${code}')">↓ 下移</button>
         <button onclick="removeFund('${code}')">删除</button>
-      </div>
-    `;
+      </div>`;
     box.appendChild(card);
   });
 }
 
-// -------------------- 上下移动 --------------------
-function moveFundUp(code){ const i=fundCodes.findIndex(f=>f.code===code); if(i>0){ [fundCodes[i-1],fundCodes[i]]=[fundCodes[i],fundCodes[i-1]]; try{localStorage.setItem("fundCodes",JSON.stringify(fundCodes));}catch(e){} render(); } }
-function moveFundDown(code){ const i=fundCodes.findIndex(f=>f.code===code); if(i<fundCodes.length-1){ [fundCodes[i+1],fundCodes[i]]=[fundCodes[i],fundCodes[i+1]]; try{localStorage.setItem("fundCodes",JSON.stringify(fundCodes));}catch(e){} render(); } }
+/* 上下移动 */
+function moveFundUp(code){
+  const i=fundCodes.indexOf(code);
+  if(i>0){ [fundCodes[i-1],fundCodes[i]]=[fundCodes[i],fundCodes[i-1]]; localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); render(); }
+}
+function moveFundDown(code){
+  const i=fundCodes.indexOf(code);
+  if(i<fundCodes.length-1){ [fundCodes[i+1],fundCodes[i]]=[fundCodes[i],fundCodes[i+1]]; localStorage.setItem("fundCodes",JSON.stringify(fundCodes)); render(); }
+}
 
+/* 刷新 */
 function refreshAll(){ fundCodes.forEach(loadFund); }
 
-render(); refreshAll(); setInterval(refreshAll,30000);
+render();
+refreshAll();
+setInterval(refreshAll,30000);
 </script>
+
 </body>
 </html>
