@@ -138,6 +138,7 @@
             padding: 16px;
             border-bottom: 1px solid #eee;
             transition: background-color 0.2s;
+            cursor: pointer;
         }
         
         .fund-item:hover {
@@ -298,6 +299,18 @@
         .remove-fund:hover {
             opacity: 1;
         }
+        
+        .selected {
+            background-color: #f0f7ff;
+            border-left: 4px solid #3498db;
+        }
+        
+        .search-hint {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            margin-top: 8px;
+            padding-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -315,6 +328,7 @@
                         <input type="text" id="fundCodeInput" placeholder="输入基金代码，例如：000001、110022">
                         <button id="searchBtn">查询</button>
                     </div>
+                    <div class="search-hint">支持6位基金代码查询，新基金将自动生成模拟数据</div>
                     
                     <h2 class="card-title"><i class="fas fa-star"></i> 我的关注</h2>
                     <ul class="fund-list" id="fundList">
@@ -446,6 +460,30 @@
             }
         };
 
+        // 基金名称生成数据
+        const fundCompanies = [
+            '华夏', '易方达', '嘉实', '南方', '汇添富', '广发', '富国', '博时', '招商', '工银',
+            '华安', '大成', '鹏华', '银华', '华泰柏瑞', '景顺长城', '中欧', '兴证全球', '前海开源',
+            '国泰', '平安', '农银汇理', '建信', '中银', '交银施罗德', '民生加银', '光大保德信',
+            '长城', '诺安', '华宝', '万家', '上投摩根', '国投瑞银', '摩根士丹利华鑫', '永赢'
+        ];
+        
+        const fundTypes = [
+            '成长', '价值', '平衡', '稳健', '优选', '精选', '优势', '核心', '先锋', '创新',
+            '蓝筹', '红利', '主题', '行业', '轮动', '趋势', '策略', '量化', '智能', '科技',
+            '消费', '医药', '新能源', '环保', '高端制造', '互联网', '金融', '地产', '基建'
+        ];
+        
+        const fundCategories = ['股票', '混合', '债券', '指数', 'QDII', 'FOF', '货币'];
+        
+        const fundSuffixes = ['A', 'B', 'C', ''];
+        
+        const managerNames = [
+            '张坤', '刘彦春', '葛兰', '谢治宇', '朱少醒', '董承非', '周蔚文', '王宗合',
+            '萧楠', '胡昕炜', '傅鹏博', '陈光明', '冯明远', '蔡嵩松', '刘格菘', '郑澄然',
+            '赵诣', '何帅', '杨锐文', '归凯', '王崇', '邬传雁', '李晓星', '李元博'
+        ];
+
         // 默认关注的基金代码
         let followedFunds = ['000001', '110022', '001875'];
         let selectedFundCode = '000001';
@@ -490,6 +528,13 @@
                 return;
             }
             
+            // 验证基金代码格式（6位数字）
+            if (!/^\d{6}$/.test(code)) {
+                alert('请输入6位数字基金代码');
+                fundCodeInput.focus();
+                return;
+            }
+            
             // 检查基金是否存在
             if (!fundData[code]) {
                 // 如果不存在，创建一个模拟基金
@@ -507,16 +552,50 @@
             fundCodeInput.value = '';
         }
 
+        // 生成随机的基金名称（更真实的命名方式）
+        function generateFundName() {
+            const company = fundCompanies[Math.floor(Math.random() * fundCompanies.length)];
+            const type = fundTypes[Math.floor(Math.random() * fundTypes.length)];
+            const category = fundCategories[Math.floor(Math.random() * fundCategories.length)];
+            const suffix = fundSuffixes[Math.floor(Math.random() * fundSuffixes.length)];
+            
+            // 组合基金名称
+            let name = `${company}${type}${category}`;
+            
+            // 随机决定是否添加后缀
+            if (suffix) {
+                name += ` ${suffix}`;
+            }
+            
+            // 随机决定是否添加其他描述
+            if (Math.random() > 0.5) {
+                const descriptors = ['灵活配置', '增强', '量化', '精选', '优势'];
+                const descriptor = descriptors[Math.floor(Math.random() * descriptors.length)];
+                name += ` ${descriptor}`;
+            }
+            
+            // 添加基金类型后缀
+            if (category === '股票') {
+                name += '型股票';
+            } else if (category === '混合') {
+                name += '型混合';
+            } else if (category === '债券') {
+                name += '型债券';
+            } else if (category === '指数') {
+                name += '指数';
+            } else if (category === 'QDII') {
+                name += '(QDII)';
+            } else if (category === 'FOF') {
+                name += '(FOF)';
+            } else if (category === '货币') {
+                name += '型货币';
+            }
+            
+            return name;
+        }
+
         // 创建模拟基金数据（用于搜索不存在的基金代码时）
         function createMockFund(code) {
-            const categories = ['股票型', '混合型', '债券型', '指数型', 'QDII'];
-            const managers = ['张经理', '王经理', '李经理', '刘经理', '陈经理'];
-            const names = ['优选成长', '稳健收益', '价值发现', '行业轮动', '蓝筹精选'];
-            
-            const category = categories[Math.floor(Math.random() * categories.length)];
-            const manager = managers[Math.floor(Math.random() * managers.length)];
-            const name = `${manager}管理${category}${names[Math.floor(Math.random() * names.length)]}`;
-            
             // 生成随机净值 (1.0-5.0之间)
             const baseValue = 1 + Math.random() * 4;
             const change = (Math.random() - 0.5) * 0.1;
@@ -531,9 +610,21 @@
                 history.push(parseFloat(lastValue.toFixed(3)));
             }
             
+            // 随机选择基金类型
+            const categories = ['股票型', '混合型', '债券型', '指数型', 'QDII', 'FOF', '货币型'];
+            const category = categories[Math.floor(Math.random() * categories.length)];
+            
+            // 随机选择基金经理
+            const manager = managerNames[Math.floor(Math.random() * managerNames.length)];
+            
+            // 生成随机的成立日期（2000-2022年之间）
+            const year = 2000 + Math.floor(Math.random() * 23);
+            const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
+            const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
+            
             return {
                 code: code,
-                name: name,
+                name: generateFundName(),
                 currentValue: parseFloat(baseValue.toFixed(3)),
                 change: parseFloat(change.toFixed(3)),
                 changePercent: parseFloat(changePercent.toFixed(2)),
@@ -544,7 +635,7 @@
                 yearLow: parseFloat((baseValue - Math.random() * 0.8).toFixed(3)),
                 category: category,
                 manager: manager,
-                established: `${2010 + Math.floor(Math.random() * 12)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`,
+                established: `${year}-${month}-${day}`,
                 assets: parseFloat((10 + Math.random() * 500).toFixed(1)),
                 valuationHistory: history
             };
@@ -571,8 +662,7 @@
                 
                 // 设置选中样式
                 if (code === selectedFundCode) {
-                    listItem.style.backgroundColor = '#f0f7ff';
-                    listItem.style.borderLeft = '4px solid #3498db';
+                    listItem.classList.add('selected');
                 }
                 
                 listItem.innerHTML = `
